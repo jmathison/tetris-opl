@@ -199,12 +199,14 @@ while True:
             elif event.key == pygame.K_SPACE:
                 #rotation
                 tetrimino_rotation += 1
-                if tetrimino_rotation >= len(pieces[tetrimino_type]):
-                    tetrimino_rotation = 0;
+                tetrimino_rotation %= len(pieces[tetrimino_type])
+                tetrimino = pieces[tetrimino_type][tetrimino_rotation]
+            elif event.key == pygame.K_LSHIFT:
+                tetrimino_rotation -= 1
+                tetrimino_rotation %= len(pieces[tetrimino_type])
                 tetrimino = pieces[tetrimino_type][tetrimino_rotation]
             elif event.key == pygame.K_TAB:
                 tetrimino_type = random.choice(types)
-                print(tetrimino_type)
                 tetrimino_rotation = 0
                 tetrimino_x, tetrimino_y = tetrimino_start
                 tetrimino = pieces[tetrimino_type][tetrimino_rotation]
