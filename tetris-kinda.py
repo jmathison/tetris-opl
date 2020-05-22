@@ -144,6 +144,21 @@ def draw_tetrimino(pos, tetrimino, board_surface):
                 draw_tile((tile_x, tile_y), tile_type, board_surface)
 
 
+def draw_ghost(pos, tetrimino, board_surface):
+
+    top_x, top_y = pos
+    rows = len(tetrimino)
+    cols = len(tetrimino[0])
+
+    for y in range(rows):
+        for x in range(cols):
+            tile_type = tetrimino[y][x]
+            if tile_type != 0:
+                tile_x = (top_x + x) * TILE_SIZE
+                tile_y = (top_y + y) * TILE_SIZE
+                draw_tile_ghost((tile_x, tile_y), tile_type, board_surface)
+
+
 
 def draw_play_area(screen_pos, screen_surface, board_surface):
     # how many rows show of the play area. 20.5 shows half of 21 so players can see new blocks fall into play.
@@ -161,6 +176,15 @@ def draw_tile(pos, tile_type, surface):
     pygame.draw.rect(surface, tile_color,rect)
     # Draw the grid border
     pygame.draw.rect(surface, Color("gray"), rect.inflate(1, 1), 1)
+
+def draw_tile_ghost(pos, tile_type, surface):
+    tile_color = pygame.Color(colors[tile_type])
+    rect = Rect(pos, (TILE_SIZE, TILE_SIZE))
+
+    # Draw the filled rect
+    #pygame.draw.rect(surface, tile_color, rect)
+    # Draw the grid border
+    pygame.draw.rect(surface, tile_color, rect.inflate(1, 1), 3)
 
 
 def collision_check(position, grid, tetrimino):
@@ -244,6 +268,39 @@ def check_lock_out(position, grid, tetrimino):
     # if the lowest block was above our out of bounds cutoff, game over.
     return max_y <= out_of_bounds_y
 
+
+# locations to check for wall kick rotations. Indexes 0-3 represent each possible rotation. List of tuples is the offsets to check for a valid rotation.
+KICK_VALUES = [
+    [
+        (0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)
+    ],
+    [
+        (0, 0), (1, 0), (1, -1), (0, 2), (1, 2)
+    ],
+    [
+        (0, 0), (1, 0), (1, 1), (0, -2), (1, -2)
+    ],
+    [
+        (0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)
+    ]
+]
+
+KICK_VALUES_I = [
+    [
+        (0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)
+    ],
+    [
+        (0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)
+    ],
+    [
+        (0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)
+    ],
+    [
+        (0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)
+    ]
+]
+
+
 class Tetrimino:
 
     def __init__(self):
@@ -274,10 +331,25 @@ class Tetrimino:
     def rotate(self, dr):
         new_rotation = (self.rotation + dr) % len(pieces[self.type])
         # TODO: Wall kicks - currently rotation just fails if impossible.
-        if not collision_check(self.get_pos(), self.grid_ref, pieces[self.type][new_rotation]):
-            self.rotation = new_rotation
-            # rotate succeeded
-            return True
+
+        # If the block is an "I" we need to use the special kick values for I blocks
+        kick_values = KICK_VALUES_I if self.type == "I" else KICK_VALUES
+
+        # get the kick values for the current rotation
+        kick_values_for_rotation = kick_values[self.rotation]
+        for value in kick_values_for_rotation:
+            # go through each kick value checking if any are a valid rotation destination.
+            kick_x, kick_y = value
+            kick_x *= dr
+            kick_y *= dr
+            pos = (self.x + kick_x, self.y + kick_y)
+            if not collision_check(pos, self.grid_ref, pieces[self.type][new_rotation]):
+                self.rotation = new_rotation
+                self.x += kick_x
+                self.y += kick_y
+                # rotate succeeded
+                return True
+
         # rotate failed
         return False
 
@@ -306,6 +378,10 @@ tetrimino_start = (3, 18)
 active_tetrimino = Tetrimino()
 active_tetrimino.grid_ref = board
 active_tetrimino.reset()
+
+# spooky
+ghost = Tetrimino()
+ghost.grid_ref = board
 
 # Delayed automatic scrolling - das_clock will track how many frames the move keys are held before scrolling starts.
 # Change das_time to control how many frames before automatic scrolling starts.
@@ -379,10 +455,21 @@ while True:
                     das_clock = 0
                 elif event.key == pygame.K_DOWN:
                     current_drop_time = soft_drop_time(base_drop_time)
+                    # manual locking
+                    if locking:
+                        lock_clock = lock_delay
                 elif event.key == pygame.K_UP or event.key == pygame.K_x:
                     rotated = active_tetrimino.rotate(1)
                 elif event.key == pygame.K_z or event.key == pygame.K_RCTRL:
                     rotated = active_tetrimino.rotate(-1)
+                elif event.key == pygame.K_SPACE:
+                    # Hard drop. Move the block down instantly
+                    while active_tetrimino.move(0,1):
+                        pass
+                    # Max out drop clock and lock clock to prepare to lock the block instantly.
+                    drop_clock = current_drop_time
+                    locking = True
+                    lock_clock = lock_delay
                 elif event.key == pygame.K_TAB:
                     active_tetrimino.reset()
             elif event.type == KEYUP:
@@ -453,10 +540,18 @@ while True:
         if infinite_lock and (moved or rotated):
             lock_clock = 0
 
+        ghost.x = active_tetrimino.x
+        ghost.y = active_tetrimino.y
+        ghost.rotation = active_tetrimino.rotation
+        ghost.type = active_tetrimino.type
+        while ghost.move(0, 1):
+            pass
+
         screen.fill(Color("gray"))
 
         draw_board(board, board_surface)
-        draw_tetrimino((active_tetrimino.x, active_tetrimino.y), pieces[active_tetrimino.type][active_tetrimino.rotation], board_surface)
+        draw_ghost(ghost.get_pos(), ghost.get_piece(), board_surface)
+        draw_tetrimino(active_tetrimino.get_pos(), active_tetrimino.get_piece(), board_surface)
 
         draw_play_area((10, 10), screen, board_surface)
 
