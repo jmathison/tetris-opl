@@ -1,12 +1,18 @@
 # Allows use of pygame functions
-import pygame, sys, random
+import pygame, sys, random, math
 from pygame.locals import *
 
 ROWS = 40
 COLS = 10
 TILE_SIZE = 20
 
-board = [[0] * COLS] * ROWS
+
+# Create an empty board.
+def clear_board():
+    return [[0 for _ in range(COLS)] for _ in range(ROWS)]
+
+
+board = clear_board()
 
 types = ["I", "J", "L", "O", "S", "T", "Z"]
 
@@ -156,10 +162,136 @@ def draw_tile(pos, tile_type, surface):
     pygame.draw.rect(surface, Color("gray"), rect.inflate(1, 1), 1)
 
 
+def collision_check(position, grid, tetrimino):
+    top_x, top_y = position
+    tetrimino_height = len(tetrimino)
+    tetrimino_width = len(tetrimino[0])
+
+    for y in range(tetrimino_height):
+        for x in range(tetrimino_width):
+            # No need to check blank spaces of the tetrimino for collision.
+            if tetrimino[y][x] != 0:
+                # out of bounds (walls or floor)
+                if top_x + x < 0 or top_x + x >= COLS or top_y + y < 0 or top_y + y >= ROWS:
+                    return True
+                # Check vs grid
+                if grid is not None and grid[top_y + y][top_x + x] != 0:
+                    return True
+    # If you make it out of this loop without returning True, you're in the clear.
+    return False
+
+# Basically the same scanning method as collision check, but instead of checking collisions, we'll copy the tetrimino values over.
+def lock(position, grid, tetrimino):
+    top_x, top_y = position
+    tetrimino_height = len(tetrimino)
+    tetrimino_width = len(tetrimino[0])
+
+    for y in range(tetrimino_height):
+        for x in range(tetrimino_width):
+            # No need to check blank spaces of the tetrimino.
+            # Should never be out of bounds since we only try to lock after a collision check.
+            tile = tetrimino[y][x]
+            if tile != 0:
+                # print(tile)
+                # print("setting " + str(top_x + x) + " " + str(top_y + y) + " to " + str(tile))
+                # print(grid[top_y + y][top_x + x])
+                grid[top_y + y][top_x + x] = tile
+
+
+def check_and_clear_lines(grid):
+    lines_cleared = 0
+
+    # list to keep track of which lines we need to pull out
+    full_lines = []
+    for y, line in enumerate(grid):
+        if 0 not in line:
+            # if there's no 0 in the line, then it's cleared
+            lines_cleared += 1
+            # add to the list for later
+            full_lines.append(y)
+
+    if lines_cleared > 0:
+        for y in full_lines:
+            # remove the element at index y.
+            grid.pop(y)
+            # insert a new empty row at the top.
+            grid.insert(0, [0 for _ in range(COLS)])
+
+    return lines_cleared
+
+
+def score_lines(lines_cleared):
+    if 1 < lines_cleared < 4:
+        lines_cleared += 2
+    elif lines_cleared == 4:
+        lines_cleared += 4
+    return lines_cleared
+
+def check_lock_out(position, grid, tetrimino):
+    top_x, top_y = position
+    tetrimino_height = len(tetrimino)
+    tetrimino_width = len(tetrimino[0])
+
+    out_of_bounds_y = 19
+    max_y = 0
+
+    for y in range(tetrimino_height):
+        if not all(tetrimino[y]):
+            # find the lowest row this block locked into
+            max_y = top_y + y
+
+    # if the lowest block was above our out of bounds cutoff, game over.
+    return max_y <= out_of_bounds_y
+
+class Tetrimino:
+
+    def __init__(self):
+        self.type = "I"
+        self.rotation = 0
+        self.x, self.y = tetrimino_start
+
+        # Set grid_ref manually - if left as none, blocks will fall and ignore the grid.
+        self.grid_ref = None
+
+    def reset(self):
+        # TODO: Bag shuffle instead of random choice
+        self.type = random.choice(types)
+        self.rotation = 0
+        self.x, self.y = tetrimino_start
+
+    def move(self, dx, dy):
+        destination_x = self.x + dx
+        destination_y = self.y + dy
+        if not collision_check((destination_x, destination_y), self.grid_ref, self.get_piece()):
+            self.x = destination_x
+            self.y = destination_y
+            # move succeeded
+            return True
+        # move failed
+        return False
+
+    def rotate(self, dr):
+        new_rotation = (self.rotation + dr) % len(pieces[self.type])
+        # TODO: Wall kicks - currently rotation just fails if impossible.
+        if not collision_check(self.get_pos(), self.grid_ref, pieces[self.type][new_rotation]):
+            self.rotation = new_rotation
+            # rotate succeeded
+            return True
+        # rotate failed
+        return False
+
+    # get position as a tuple
+    def get_pos(self):
+        return self.x, self.y
+
+    # get the 2d array for the current tetrimino type and rotation.
+    def get_piece(self):
+        return pieces[self.type][self.rotation]
+
 
 pygame.init()
 clock = pygame.time.Clock()
-MAX_FPS = 60
+FPS = 60
 
 screen = pygame.display.set_mode((640, 480))
 pygame.display.set_caption("Tetris, kinda")
@@ -169,75 +301,170 @@ pygame.display.set_caption("Tetris, kinda")
 board_surface = pygame.Surface((COLS * TILE_SIZE, ROWS * TILE_SIZE))
 
 tetrimino_start = (3, 18)
-tetrimino_x, tetrimino_y = tetrimino_start
 
-tetrimino_type = "J"
-tetrimino_rotation = 0
+active_tetrimino = Tetrimino()
+active_tetrimino.grid_ref = board
+active_tetrimino.reset()
 
-tetrimino = pieces["J"][0]
-
-
-drop_clock = 0
-drop_time = 30
-
+# Delayed automatic scrolling - das_clock will track how many frames the move keys are held before scrolling starts.
+# Change das_time to control how many frames before automatic scrolling starts.
 das_clock = 0
 das_time = 9
 new_keypress = False
 
+# TODO: Lock delay - how many frames before locking
+# lock_clock = 0
+# lock_delay = 30
+
+score = 0
+level = 1
+next_level = 5 * level
+
+drop_clock = 0
+
+# Calculations for drop time by level and soft drop speed taken from guidelines. We can simplify this if we want.
+def calculate_drop_time(level):
+    return math.floor(math.pow((0.8 - ((level - 1) * 0.007)), level-1) * 60)
+
+def soft_drop_time(base_drop_time):
+    return base_drop_time // 20
+
+current_drop_time = base_drop_time = calculate_drop_time(level)
+
+# Load a font to display score
+font = pygame.font.Font(None, 24)
+
+# game states
+RESTART = -1
+PLAYING = 0
+GAME_OVER = 1
+
+game_state = PLAYING
+
 while True:
-    # tick based on max fps, save time since last frame.
-    delta_time = clock.tick(MAX_FPS)
+    while game_state == RESTART:
+        board = clear_board()
+        active_tetrimino = Tetrimino()
+        active_tetrimino.grid_ref = board
+        active_tetrimino.reset()
+        score = 0
+        level = 1
+        next_level = 5 * level
+        current_drop_time = base_drop_time = calculate_drop_time(level)
+        game_state = PLAYING
 
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
-        elif event.type == KEYDOWN:
-            if event.key == pygame.K_RIGHT or event.key == pygame.K_LEFT:
-                new_keypress = True
-                das_clock = 0
-            elif event.key == pygame.K_SPACE:
-                #rotation
-                tetrimino_rotation += 1
-                tetrimino_rotation %= len(pieces[tetrimino_type])
-                tetrimino = pieces[tetrimino_type][tetrimino_rotation]
-            elif event.key == pygame.K_LSHIFT:
-                tetrimino_rotation -= 1
-                tetrimino_rotation %= len(pieces[tetrimino_type])
-                tetrimino = pieces[tetrimino_type][tetrimino_rotation]
-            elif event.key == pygame.K_TAB:
-                tetrimino_type = random.choice(types)
-                tetrimino_rotation = 0
-                tetrimino_x, tetrimino_y = tetrimino_start
-                tetrimino = pieces[tetrimino_type][tetrimino_rotation]
+    while game_state == PLAYING:
+        # tick based on max fps
+        clock.tick(FPS)
 
-    drop_clock += 1
-    if drop_clock >= drop_time:
-        tetrimino_y += 1
-        drop_clock = 0
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == KEYDOWN:
+                if event.key == pygame.K_RIGHT or event.key == pygame.K_LEFT:
+                    new_keypress = True
+                    das_clock = 0
+                elif event.key == pygame.K_DOWN:
+                    current_drop_time = soft_drop_time(base_drop_time)
+                elif event.key == pygame.K_UP or event.key == pygame.K_x:
+                    active_tetrimino.rotate(1)
+                elif event.key == pygame.K_z or event.key == pygame.K_RCTRL:
+                    active_tetrimino.rotate(-1)
+                elif event.key == pygame.K_TAB:
+                    active_tetrimino.reset()
+            elif event.type == KEYUP:
+                if event.key == pygame.K_DOWN:
+                    current_drop_time = base_drop_time
 
-    # Get all keys that are currently down
-    keys_down = pygame.key.get_pressed()
+        # Increase the drop clock each frame, once we pass current_drop_time, it's time to fall.
+        drop_clock += 1
+        if drop_clock >= current_drop_time:
+            successful_fall = active_tetrimino.move(0, 1)
+            if not successful_fall:
+                # hit something while falling!
+                lock(active_tetrimino.get_pos(), board, active_tetrimino.get_piece())
+                lines_cleared = check_and_clear_lines(board)
+                if lines_cleared > 0:
+                    # Increase score based on lines cleared.
+                    score += score_lines(lines_cleared)
+                    if score >= next_level:
+                        level += 1
+                        next_level = 5 * level
+                        base_drop_time = calculate_drop_time(level)
 
-    # DAS included to improve tapping vs. holding input feel.
-    if keys_down[pygame.K_RIGHT]:
-        das_clock += 1
-        if das_clock >= das_time or new_keypress:
-            tetrimino_x += 1
-            new_keypress = False
-    elif keys_down[pygame.K_LEFT]:
-        das_clock += 1
-        if das_clock >= das_time or new_keypress:
-            tetrimino_x -= 1
-            new_keypress = False
+                # after lines cleared, check for a game over by first checking if the last locked piece was completely above the top line.
+                game_over = check_lock_out(active_tetrimino.get_pos(), board, active_tetrimino.get_piece())
+
+                # First drop after reset is instant, don't wait for drop clock.
+                drop_clock = base_drop_time
+                active_tetrimino.reset()
+                # After resetting the piece, also check for game over if the spawned piece collided with anything.
+                game_over = collision_check(active_tetrimino.get_pos(), board, active_tetrimino.get_piece())
+                if game_over:
+                    game_state = GAME_OVER
+                    pass
+            drop_clock = 0
+
+        # Get all keys that are currently down
+        keys_down = pygame.key.get_pressed()
+
+        # DAS included to improve tapping vs. holding input feel.
+        if keys_down[pygame.K_RIGHT]:
+            das_clock += 1
+            if das_clock >= das_time or new_keypress:
+                active_tetrimino.move(1, 0)
+                new_keypress = False
+        elif keys_down[pygame.K_LEFT]:
+            das_clock += 1
+            if das_clock >= das_time or new_keypress:
+                active_tetrimino.move(-1, 0)
+                new_keypress = False
+
+        screen.fill(Color("gray"))
+
+        draw_board(board, board_surface)
+        draw_tetrimino((active_tetrimino.x, active_tetrimino.y), pieces[active_tetrimino.type][active_tetrimino.rotation], board_surface)
+
+        draw_play_area((10, 10), screen, board_surface)
+
+        score_surface = font.render("Lines: " + str(score), False, pygame.Color("black"))
+        level_surface = font.render("Level: " + str(level), False, pygame.Color("black"))
+        next_level_surface = font.render("Next Level: " + str(next_level), False, pygame.Color("black"))
+        screen.blit(score_surface, (10 + board_surface.get_width() + 10, 10))
+        screen.blit(level_surface, (10 + board_surface.get_width() + 10, 10 + font.get_linesize()))
+        screen.blit(next_level_surface, (10 + board_surface.get_width() + 10, 10 + 2* font.get_linesize()))
+
+        pygame.display.update()
+
+    while game_state == GAME_OVER:
+        # tick based on max fps
+        clock.tick(FPS)
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    game_state = RESTART
 
 
-    screen.fill(Color("gray"))
+        screen.fill(Color("red"))
 
-    draw_board(board, board_surface)
-    draw_tetrimino((tetrimino_x, tetrimino_y), tetrimino, board_surface)
+        draw_board(board, board_surface)
+        draw_tetrimino((active_tetrimino.x, active_tetrimino.y),
+                       pieces[active_tetrimino.type][active_tetrimino.rotation], board_surface)
 
-    draw_play_area((10, 10), screen, board_surface)
+        draw_play_area((10, 10), screen, board_surface)
 
-    pygame.display.update()
+        score_surface = font.render("Lines: " + str(score), False, pygame.Color("white"))
+        level_surface = font.render("Level: " + str(level), False, pygame.Color("white"))
+        next_level_surface = font.render("Next Level: " + str(next_level), False, pygame.Color("white"))
+        game_over_surface = font.render("Game over! Press Space to restart.", False, pygame.Color("white"))
+        screen.blit(score_surface, (10 + board_surface.get_width() + 10, 10))
+        screen.blit(level_surface, (10 + board_surface.get_width() + 10, 10 + font.get_linesize()))
+        screen.blit(next_level_surface, (10 + board_surface.get_width() + 10, 10 + 2 * font.get_linesize()))
+        screen.blit(game_over_surface, (10 + board_surface.get_width() + 10, 10 + 3 * font.get_linesize()))
 
+        pygame.display.update()
