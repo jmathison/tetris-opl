@@ -2,7 +2,7 @@
 Tetris implementation in pygame, following some but definitely not all of Tetris guidelines.
 Requires Python 3.x and pygame 1.9.3
 
-# Patch Notes
+# Patch Notes 5/22
 Fixed:
 - added a missing block to rotation 3 of "I" block
 
