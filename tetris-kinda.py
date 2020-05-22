@@ -36,6 +36,7 @@ pieces = {
          [0, 0, 0, 0]],
         [[0, 1, 0, 0],
          [0, 1, 0, 0],
+         [0, 1, 0, 0],
          [0, 1, 0, 0]
          ]
     ],
@@ -312,9 +313,17 @@ das_clock = 0
 das_time = 9
 new_keypress = False
 
-# TODO: Lock delay - how many frames before locking
-# lock_clock = 0
-# lock_delay = 30
+# Lock delay - how many frames before locking
+lock_clock = 0
+lock_delay = 30
+
+# Infinite lock delay or Classic:
+# Infinite (infinite_lock = True) - any successful move resets the lock counter.
+# Classic (infinite_lock = False) - only a successful drop resets the counter.
+infinite_lock = True
+
+# Are we counting down to a lock?
+locking = False
 
 score = 0
 level = 1
@@ -357,6 +366,9 @@ while True:
         # tick based on max fps
         clock.tick(FPS)
 
+        moved = False
+        rotated = False
+
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -368,9 +380,9 @@ while True:
                 elif event.key == pygame.K_DOWN:
                     current_drop_time = soft_drop_time(base_drop_time)
                 elif event.key == pygame.K_UP or event.key == pygame.K_x:
-                    active_tetrimino.rotate(1)
+                    rotated = active_tetrimino.rotate(1)
                 elif event.key == pygame.K_z or event.key == pygame.K_RCTRL:
-                    active_tetrimino.rotate(-1)
+                    rotated = active_tetrimino.rotate(-1)
                 elif event.key == pygame.K_TAB:
                     active_tetrimino.reset()
             elif event.type == KEYUP:
@@ -383,6 +395,21 @@ while True:
             successful_fall = active_tetrimino.move(0, 1)
             if not successful_fall:
                 # hit something while falling!
+                # start the locking process
+                if not locking:
+                    locking = True
+                    lock_clock = 0
+            else:
+                # If fall was successful, we're no longer locking.
+                locking = False
+            drop_clock = 0
+
+        # if locking, increase the lock counter. when counter expires, lock it.
+        if locking:
+            lock_clock += 1
+            print(lock_clock)
+            if lock_clock >= lock_delay:
+
                 lock(active_tetrimino.get_pos(), board, active_tetrimino.get_piece())
                 lines_cleared = check_and_clear_lines(board)
                 if lines_cleared > 0:
@@ -404,7 +431,8 @@ while True:
                 if game_over:
                     game_state = GAME_OVER
                     pass
-            drop_clock = 0
+                lock_clock = 0
+                locking = False
 
         # Get all keys that are currently down
         keys_down = pygame.key.get_pressed()
@@ -413,13 +441,17 @@ while True:
         if keys_down[pygame.K_RIGHT]:
             das_clock += 1
             if das_clock >= das_time or new_keypress:
-                active_tetrimino.move(1, 0)
+                moved = active_tetrimino.move(1, 0)
                 new_keypress = False
         elif keys_down[pygame.K_LEFT]:
             das_clock += 1
             if das_clock >= das_time or new_keypress:
-                active_tetrimino.move(-1, 0)
+                moved = active_tetrimino.move(-1, 0)
                 new_keypress = False
+
+        # reset drop clock on successful move / rotate
+        if infinite_lock and (moved or rotated):
+            lock_clock = 0
 
         screen.fill(Color("gray"))
 
