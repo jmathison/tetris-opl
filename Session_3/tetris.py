@@ -1,6 +1,7 @@
 import pygame
 from pygame.locals import *
 # NEW: Import assets from tetris_pieces.py
+# IMPORTANT NOTE 1: depending on how your Pycharm is set up you might need to add this directory as a path in the project interpretor settings
 from tetris_pieces import *
 
 pygame.init()
@@ -76,6 +77,11 @@ PLAYING = 0
 GAME_OVER = 1
 game_state = PLAYING
 
+# NEW: Create first tetrimino
+active_tetrimino = Tetrimino()
+active_tetrimino.grid_ref = board
+active_tetrimino.reset()
+
 #Game Loop
 while True:
     while game_state == PLAYING:
@@ -85,9 +91,18 @@ while True:
                 pygame.quit()
                 quit()
 
+        # NEW : Once you finish the terimino class use this to move the piece down every frame it should go really fast
+        active_tetrimino.move(0,1)
+
         screen.fill(gray)
         draw_board(board, board_surface)
-        draw_tetrimino(3,15, pieces[0][0], board_surface)
+
+        # IMPORTANT NOTE 2 : Below code is for drawing a tetrimino to check!
+        # draw_tetrimino(3,30, pieces["I"][0], board_surface)
+
+        # NEW: drawing a random tetris piece
+        draw_tetrimino(active_tetrimino.x, active_tetrimino.y, pieces[active_tetrimino.type][active_tetrimino.rotation],board_surface)
+
         draw_play_area((10,10), screen, board_surface)
 
         pygame.display.update()
