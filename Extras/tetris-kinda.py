@@ -193,9 +193,6 @@ def lock(position, grid, tetrimino):
             # Should never be out of bounds since we only try to lock after a collision check.
             tile = tetrimino[y][x]
             if tile != 0:
-                # print(tile)
-                # print("setting " + str(top_x + x) + " " + str(top_y + y) + " to " + str(tile))
-                # print(grid[top_y + y][top_x + x])
                 grid[top_y + y][top_x + x] = tile
 
 
@@ -273,7 +270,6 @@ class Tetrimino:
 
     def rotate(self, dr):
         new_rotation = (self.rotation + dr) % len(pieces[self.type])
-        # TODO: Wall kicks - currently rotation just fails if impossible.
         if not collision_check(self.get_pos(), self.grid_ref, pieces[self.type][new_rotation]):
             self.rotation = new_rotation
             # rotate succeeded

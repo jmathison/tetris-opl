@@ -5,8 +5,6 @@ types = ["I", "J", "L", "O", "S", "T", "Z"]
 
 # dict of pieces and their rotations. Key is tile type.
 pieces = {
-    # IMPORTANT NOTE 3: Have the student only do one of these and give them the rest!
-    # see IMPORTANT NOTE 2 for a debug / check code to make sure their pieces work
     "I": [
         [[0, 0, 0, 0],
          [1, 1, 1, 1],
@@ -103,8 +101,6 @@ pieces = {
     ]
 }
 
-# IMPORTANT NOTE 4 : Do this after you know the student can draw a tetrimino onto the board with no issues
-# NEW: Tetrimino class
 
 class Tetrimino:
 
@@ -121,13 +117,36 @@ class Tetrimino:
         self.rotation = 0
         self.x, self.y = (3,18)
 
+    # NEW: redefine move function to check for collision
     def move(self, dx, dy):
-        self.x += dx
-        self.y += dy
+        destination_x = self.x + dx
+        destination_y = self.y + dy
+        if not self.collision_check(destination_x, destination_y):
+            self.x = destination_x
+            self.y = destination_y
 
     def rotate(self, dr):
         new_rotation = (self.rotation + dr) % len(pieces[self.type])
         self.rotation = new_rotation
 
 
+    # NEW: Define a collision check function
+    def collision_check(self,xPos,yPos):
+        top_x, top_y = xPos, yPos
+        tetrimino = pieces[self.type][self.rotation]
+        tetrimino_height = len(tetrimino)
+        tetrimino_width = len(tetrimino[0])
+
+        for y in range(tetrimino_height):
+            for x in range(tetrimino_width):
+                # No need to check blank spaces of the tetrimino for collision.
+                if tetrimino[y][x] != 0:
+                    # out of bounds (walls or floor)
+                    if top_x + x < 0 or top_x + x >= len(self.grid_ref[0]) or top_y + y < 0 or top_y + y >= len(self.grid_ref):
+                        return True
+                    # Check vs grid
+                    if self.grid_ref is not None and self.grid_ref[top_y + y][top_x + x] != 0:
+                        return True
+        # If you make it out of this loop without returning True, you're in the clear.
+        return False
 

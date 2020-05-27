@@ -51,7 +51,7 @@ def draw_play_area(screen_position, screen_surface, board_surface):
 # NEW: Variables for board
 ROWS = 40
 COLS = 10
-board = [[0] * COLS] * ROWS
+board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
 board_surface = pygame.Surface((COLS*TILE_SIZE, ROWS * TILE_SIZE))
 
 # Game States

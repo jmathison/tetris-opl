@@ -1,7 +1,6 @@
-import pygame
+#NEW: Import math library
+import pygame, math
 from pygame.locals import *
-# NEW: Import assets from tetris_pieces.py
-# IMPORTANT NOTE 1: depending on how your Pycharm is set up you might need to add this directory as a path in the project interpretor settings
 from tetris_pieces import *
 
 pygame.init()
@@ -18,7 +17,7 @@ purple = (160,32,240)
 gray = (190, 190, 190)
 colors = [black, cyan, blue, orange, yellow, green, purple, red]
 
-#Variables for window and tiles
+# Variables for window and tiles
 clock = pygame.time.Clock()
 FPS = 60
 WIDTH = 640
@@ -49,7 +48,6 @@ def draw_play_area(screen_position, screen_surface, board_surface):
     topY = board_surface.get_height() - rows_toShow * TILE_SIZE
     screen_surface.blit(board_surface,screen_position, Rect((0, topY), (board_surface.get_width(), rows_toShow * TILE_SIZE)))
 
-# NEW: Draw tetrimino function
 def draw_tetrimino(posX,posY, tetrimino, board_surface):
     topX = posX
     topY = posY
@@ -64,6 +62,17 @@ def draw_tetrimino(posX,posY, tetrimino, board_surface):
                 tileY = (topY + row) * TILE_SIZE
                 draw_tile(tileX, tileY, tile, board_surface)
 
+# NEW: Drop time function this is standard Tetris guidelines. reference: https://tetris.fandom.com/wiki/Tetris_Guideline
+def calculate_drop_time(level):
+    return math.floor(math.pow((0.8 - ((level - 1) * 0.007)), level-1) * 60)
+
+# NEW: Variables for player information
+level = 1
+score = 0
+new_level = 5 * level
+drop_clock = 0
+currentDropTime = baseDropTime = calculate_drop_time(level)
+
 
 # Variables for board
 ROWS = 40
@@ -77,7 +86,7 @@ PLAYING = 0
 GAME_OVER = 1
 game_state = PLAYING
 
-# NEW: Create first tetrimino
+# Create first tetrimino
 active_tetrimino = Tetrimino()
 active_tetrimino.grid_ref = board
 active_tetrimino.reset()
@@ -91,18 +100,32 @@ while True:
                 pygame.quit()
                 quit()
 
-        # NEW : Once you finish the terimino class use this to move the piece down every frame it should go really fast
-        active_tetrimino.move(0,1)
+            # NEW: Controlling the tetrinomo
+            elif event.type == KEYDOWN:
+                if event.key == pygame.K_RIGHT:
+                    active_tetrimino.move(1,0)
+                elif event.key == pygame.K_LEFT:
+                    active_tetrimino.move(-1,0)
+                elif event.key == pygame.K_UP or event.key == pygame.K_x:
+                    active_tetrimino.rotate(1)
+                elif event.key == pygame.K_z or event.key == pygame.K_RCTRL:
+                    active_tetrimino.rotate(-1)
 
+
+        # NEW: Drop clock which indicates how fast the pieces will fall down
+        # Increase the drop clock each frame, once we pass current_drop_time, it's time to fall.
+        drop_clock += 1
+        if drop_clock >= currentDropTime:
+            active_tetrimino.move(0, 1)
+            drop_clock = 0
+
+        # DELETE: active_tetrimino.move(0,1)
         screen.fill(gray)
         draw_board(board, board_surface)
 
-        # IMPORTANT NOTE 2 : Below code is for drawing a tetrimino to check!
-        # draw_tetrimino(3,30, pieces["I"][0], board_surface)
 
-        # NEW: drawing a random tetris piece
+        # drawing to the board
         draw_tetrimino(active_tetrimino.x, active_tetrimino.y, pieces[active_tetrimino.type][active_tetrimino.rotation],board_surface)
-
         draw_play_area((10,10), screen, board_surface)
 
         pygame.display.update()
