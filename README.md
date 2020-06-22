@@ -2,15 +2,13 @@
 Tetris implementation in pygame, following some but definitely not all of Tetris guidelines.
 Requires Python 3.x and pygame 1.9.3
 
-# Patch Notes 5/22
-Fixed:
-- added a missing block to rotation 3 of "I" block
+# Proposed 5 Session Code
+Each folder contains the potentially completed code for each session.
+In the Extra's folder contains the original Tetris file that also has content not included in the session.
+If students are fast leaners it is suggested to go through those concepts in the Extra's folder i.e. Displaying score and Current Level
 
-Added:
-- Lock delay
+# Disclaimer
+This is used as a guide, if you would like to use the original code or other features there is other options via the branches on this Git Repo
 
-To-Do:
-- Reduce lock delay while soft dropping so lock doesn't feel slow.
-- Use random bag shuffle instead of pure random choice
-- Next block display
-- Wall kicks for nicer rotation
+# Credits
+Please thank John for all his hard work he put into this project. Without him this would not have been possible :)
