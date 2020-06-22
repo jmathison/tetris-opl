@@ -107,6 +107,7 @@ class Tetrimino:
     def __init__(self):
         self.type = "I"
         self.rotation = 0
+        self.newRotation = 0
         self.x, self.y = (3,18)
 
         # Set grid_ref manually - if left as none, blocks will fall and ignore the grid.
@@ -127,11 +128,17 @@ class Tetrimino:
 
     def rotate(self, dr):
         new_rotation = (self.rotation + dr) % len(pieces[self.type])
+        prev_rotation = self.rotation
         self.rotation = new_rotation
+        if not self.collision_check(self.x, self.y):
+            # rotate succeeded
+            return
+        self.rotation = prev_rotation
+        # rotate failed
 
 
     # NEW: Define a collision check function
-    def collision_check(self,xPos,yPos):
+    def collision_check(self,xPos,yPos,rotation):
         top_x, top_y = xPos, yPos
         tetrimino = pieces[self.type][self.rotation]
         tetrimino_height = len(tetrimino)
