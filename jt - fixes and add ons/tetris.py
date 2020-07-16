@@ -1,9 +1,10 @@
-
 import pygame, math
 from pygame.locals import *
 from tetris_pieces import *
 
 pygame.init()
+# NEW
+pygame.font.init()
 
 # Colors
 black = (0,0,0)
@@ -25,6 +26,8 @@ HEIGHT = 480
 TILE_SIZE = 20
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tetris")
+# NEW: creates formatting for pygame font, 1st param is font style, second is font size
+font_format = pygame.font.SysFont('comicsansms', 60)
 
 
 def draw_board(board, board_surface):
@@ -66,7 +69,10 @@ def draw_tetrimino(posX,posY, tetrimino, board_surface):
 def calculate_drop_time(level):
     return math.floor(math.pow((0.8 - ((level - 1) * 0.007)), level-1) * 60)
 
-# NEW: Add locking method
+# NEW: taken from Jon code, will be used to create a faster drop speed for tetris piece when holding down key
+def soft_drop_time(baseDropTime):
+    return baseDropTime // 20
+
 # Basically the same scanning method as collision check, but instead of checking collisions, we'll copy the tetrimino values over.
 def lock(posX, posY, grid, tetrimino):
     top_x, top_y = posX, posY
@@ -80,7 +86,7 @@ def lock(posX, posY, grid, tetrimino):
             if tile != 0:
                 grid[top_y + y][top_x + x] = tile
 
-# NEW: Add method for checking if we need to clear a line after the piece is locked into place
+# Add method for checking if we need to clear a line after the piece is locked into place
 def check_and_clear_lines(grid):
     lines_cleared = 0
 
@@ -100,6 +106,9 @@ def check_and_clear_lines(grid):
             # insert a new empty row at the top.
             grid.insert(0, [0 for _ in range(COLS)])
 
+# NEW: from Jon's code, will use to clear board for a restart
+def clear_board():
+    return [[0 for _ in range(COLS)] for _ in range(ROWS)]
 
 level = 1
 score = 0
@@ -114,7 +123,7 @@ COLS = 10
 board = [[0 for _ in range(COLS)] for _ in range(ROWS)]
 board_surface = pygame.Surface((COLS*TILE_SIZE, ROWS * TILE_SIZE))
 
-# NEW variables for locking pieces
+# variables for locking pieces
 locking = False
 lock_clock = 0
 lock_delay = 30
@@ -144,17 +153,24 @@ while True:
                     active_tetrimino.move(1,0)
                 elif event.key == pygame.K_LEFT:
                     active_tetrimino.move(-1,0)
+                # NEW: from Jon code, implementing down key, will make base drop time increase when down key pushed
+                elif event.key == pygame.K_DOWN:
+                    currentDropTime = soft_drop_time(baseDropTime)
                 elif event.key == pygame.K_UP or event.key == pygame.K_x:
                     active_tetrimino.rotate(1)
                 elif event.key == pygame.K_z or event.key == pygame.K_RCTRL:
                     active_tetrimino.rotate(-1)
+            #NEW: from Jon code, will set current drop time back to base drop time once key is let go of
+            elif event.type == KEYUP:
+                if event.key == pygame.K_DOWN:
+                    currentDropTime = baseDropTime
 
 
         # Increase the drop clock each frame, once we pass current_drop_time, it's time to fall.
         drop_clock += 1
         if drop_clock >= currentDropTime:
             move = active_tetrimino.move(0, 1)
-            # NEW: determine if something moved and check to see if we need to lock the piece
+            # determine if something moved and check to see if we need to lock the piece
             if not move:
                 #we hit something!
                 if not locking:
@@ -165,7 +181,6 @@ while True:
                 locking = False
             drop_clock = 0
 
-        # NEW: Locking condition / timer
         #Check for locking
         if locking:
             lock_clock += 1
@@ -173,6 +188,14 @@ while True:
                 lock(active_tetrimino.x, active_tetrimino.y, board, pieces[active_tetrimino.type][active_tetrimino.rotation])
                 drop_clock = baseDropTime
                 active_tetrimino.reset()
+
+                # NEW: adjusted from what Jon had to account for our collision checker being inside our class
+                # will check for game over if active_tetrimino has collided with edge or another piece after reset
+                game_over = active_tetrimino.collision_check(active_tetrimino.x, active_tetrimino.y)
+                if game_over:
+                    game_state = GAME_OVER
+                    pass
+
                 lock_clock = 0
                 locking = False
                 check_and_clear_lines(board)
@@ -184,5 +207,43 @@ while True:
         # drawing to the board
         draw_tetrimino(active_tetrimino.x, active_tetrimino.y, pieces[active_tetrimino.type][active_tetrimino.rotation],board_surface)
         draw_play_area((10,10), screen, board_surface)
+
+        pygame.display.update()
+
+    # NEW: loop that will run while game state is equal to a game over
+    while game_state == GAME_OVER:
+        clock.tick(FPS)
+
+        # NEW: event handler that will restart game when enter/return hit
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    # NEW: resetting all values to create a new game, from Jon's code, just in different place
+                    board = clear_board()
+                    active_tetrimino = Tetrimino()
+                    active_tetrimino.grid_ref = board
+                    active_tetrimino.reset()
+                    score = 0
+                    level = 1
+                    next_level = 5 * level
+                    current_drop_time = base_drop_time = calculate_drop_time(level)
+                    game_state = PLAYING
+
+        screen.fill(black)
+
+        # NEW: Rendering text, will essentially "create" text with given colors
+        text_gameover = font_format.render("GAME OVER!", 75, red)
+        text_restart = font_format.render("RESTART", 75, gray)
+
+        # NEW: gets rectangles around text, will use this rectangle to place text
+        gameover_rect = text_gameover.get_rect()
+        restart_rect = text_restart.get_rect()
+
+        # NEW: place text on screen: text, x (equation to get to center of screen), y
+        screen.blit(text_gameover, (WIDTH / 2 - (gameover_rect[2] / 2), 150))
+        screen.blit(text_restart, (WIDTH / 2 - (restart_rect[2] / 2), 350))
 
         pygame.display.update()
